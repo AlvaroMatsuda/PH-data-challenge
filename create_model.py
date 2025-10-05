@@ -7,26 +7,48 @@ from typing import Tuple
 import pandas
 import mlflow
 import numpy as np
-from sklearn import model_selection
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn import neighbors
-from sklearn import pipeline
+from sklearn.pipeline import Pipeline
 from sklearn import preprocessing
-from sklearn import tree
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, r2_score
 
-SALES_PATH = "data/kc_house_data.csv"  # path to CSV with home sale data
-DEMOGRAPHICS_PATH = "data/zipcode_demographics.csv"  # path to CSV with demographics
+
+# ==========================
+# Variables
+# ==========================
+# path to CSV with home sale data
+SALES_PATH = "data/kc_house_data.csv" 
+
+# path to CSV with demographics
+DEMOGRAPHICS_PATH = "data/zipcode_demographics.csv"  
+
 # List of columns (subset) that will be taken from home sale data
 SALES_COLUMN_SELECTION = [
     'price', 'bedrooms', 'bathrooms', 'sqft_living', 'sqft_lot', 'floors',
     'sqft_above', 'sqft_basement', 'zipcode'
 ]
-OUTPUT_DIR = "model"  # Directory where output artifacts will be saved
+
+# Directory where output artifacts will be saved
+OUTPUT_DIR = "model"  
 
 # Set random_state seed
 RANDOM_STATE_SEED = 42
 
+# Basic model parameters
+basic_model_params = {"n_jobs": -1}
 
+# Model Parameter Search Space
+fine_tune_params = {
+    "knr__n_neighbors": [3, 5, 8, 12, 15, 20],
+    "knr__weights": ["uniform", "distance"],
+    "knr__leaf_size": [10, 20, 30, 40, 50]
+}
+
+# ===============================
+# Helper Functions
+# ===============================
 def load_data(
     sales_path: str, demographics_path: str, sales_column_selection: List[str]
 ) -> Tuple[pandas.DataFrame, pandas.Series]:
@@ -58,6 +80,107 @@ def load_data(
 
     return x, y
 
+def train_model(
+    x_train: pandas.DataFrame,
+    y_train: pandas.Series,
+    model,
+    model_params: dict
+    ):
+    """
+    Create, train and evaluate model performance.
+
+    Args:
+        x_train: pandas.DataFrame containing training data.
+        y_train: pandas.Series containing the target values of x_train.
+        sklearn_model: A SKlearn model object
+        model_params: Dictionary with model parameters.
+
+    Returns:
+        SKlearn pipeline object fitted with x_train and x_test data
+    """
+    # Creating the model pipeline
+    model = (
+        Pipeline([
+            ("scaler", preprocessing.RobustScaler()),
+            ("knr", model(**model_params))
+            ])
+        .fit(x_train, y_train)
+        )
+
+    return model
+
+def evaluate_model(
+    trained_model,
+    x_test: pandas.DataFrame,
+    y_test: pandas.Series,
+    ):
+    """
+        Evaluate the model performance. Calculates MAPE, RMSE and R2.
+
+        Args:
+            trained_model: Fitted/trained SKlearn pipeline or model object.
+            x_test: pandas.DataFrame containing test data.
+            y_test: pandas.Series containing the target values of x_test.
+        
+        Return:
+            Dictionary with model performance metrics
+    """
+
+    # Model Predictions
+    y_pred = trained_model.predict(x_test)
+
+    # Performance Metrics
+    mape = float(mean_absolute_percentage_error(y_test, y_pred))
+    rmse = float(np.sqrt(mean_squared_error(y_test, y_pred)))
+    r2 = float(r2_score(y_test, y_pred))
+    metrics = {"mape": mape, "rmse": rmse, "r2": r2}
+
+    return metrics
+
+
+def random_search_fine_tune(
+    model,
+    params_search_space: dict[list],
+    x_train: pandas.DataFrame,
+    y_train: pandas.Series,
+    ):
+    """
+    Fine-tune model performance. Apply SKLearn Random Search on the params_search_space.
+
+    Args:
+            model: SKlearn pipeline or model object.
+            params_search_space: A Dictionary containing list of values to search from for each model parameter.
+            x_train: pandas.DataFrame containing training data.
+            y_train: pandas.Series containing the target values of x_train.
+        
+        Return:
+            Best tuned model. It's a SKlearn pipeline or model object.
+    """
+    model_pipe = (
+        Pipeline([
+            ("scaler", preprocessing.RobustScaler()),
+            ("knr", model)
+            ])
+        )
+
+    random_search = RandomizedSearchCV(
+        estimator=model_pipe,
+        param_distributions=params_search_space,
+        n_iter=10,
+        scoring="neg_mean_absolute_percentage_error",
+        n_jobs=-1,
+        refit=True,
+        cv=5,
+        random_state=RANDOM_STATE_SEED
+    )
+
+    random_search.fit(x_train, y_train)
+
+    tuned_model = model_pipe.set_params(**random_search.best_params_)
+
+    tuned_model.fit(x_train, y_train)
+
+    return tuned_model
 
 def main():
     """Load data, train model, and export artifacts."""
@@ -66,66 +189,57 @@ def main():
     x, y = load_data(SALES_PATH, DEMOGRAPHICS_PATH, SALES_COLUMN_SELECTION)
 
     # Train-Test Split
-    x_train, _x_test, y_train, _y_test = model_selection.train_test_split(
+    x_train, _x_test, y_train, _y_test = train_test_split(
         x, y, random_state=RANDOM_STATE_SEED)
+    
+    # Training Basic model
+    model = train_model(x_train, y_train, neighbors.KNeighborsRegressor, basic_model_params)
+    
+    # Evaluate basic model
+    metrics = evaluate_model(model, _x_test, _y_test)
 
-    # Train model
-    # model = (
-    #     pipeline.make_pipeline(
-    #         preprocessing.RobustScaler(),
-    #         neighbors.KNeighborsRegressor()
-    #         )
-    #     .fit(x_train, y_train)
-    #     )
+    # Fine Tune model
+    tuned_model = random_search_fine_tune(neighbors.KNeighborsRegressor(), fine_tune_params, x_train, y_train)
+
+    # Evaluate tuned model
+    tuned_metrics = evaluate_model(tuned_model, _x_test, _y_test)
+
+    # Get the best model result
+    if metrics["rmse"] < tuned_metrics["rmse"]:
+        final_model = model
+        final_metrics = metrics
+        final_model_params = model[-1].get_params()
+    else:
+        final_model = tuned_model
+        final_metrics = tuned_metrics
+        final_model_params = tuned_model[-1].get_params()
+
     
     # enable autologging
     mlflow.set_tracking_uri("http://127.0.0.1:5000/")
-    mlflow.sklearn.autolog()
-    
-    # MLFlow tracking
-    with mlflow.start_run(run_name="decision_tree"):
+    mlflow.sklearn.autolog()    
 
-        # Creating the model pipeline
-        model = (
-            pipeline
-            .make_pipeline(
-                preprocessing.RobustScaler(),
-                tree.DecisionTreeRegressor(random_state=RANDOM_STATE_SEED)
-                )
-            .fit(x_train, y_train)
-            )
-        
-        # Model Predictions
-        y_pred = model.predict(_x_test)
-
-        # Performance Metrics
-        mape = float(mean_absolute_percentage_error(_y_test, y_pred))
-        rmse = float(np.sqrt(mean_squared_error(_y_test, y_pred)))
-        r2 = float(r2_score(_y_test, y_pred))
-        metrics = {"mape": mape, "rmse": rmse, "r2": r2}
-
+    with mlflow.start_run(run_name="best_model"):
         # Logging info to MLFLow
-        mlflow.log_params(model[-1].get_params())
-        mlflow.log_metrics(metrics)
-        mlflow.sklearn.log_model(model, artifact_path="model")
-
+        mlflow.log_params(final_model_params)
+        mlflow.log_metrics(final_metrics)
+        mlflow.sklearn.log_model(final_model, "model")
 
     # Saving Artifacts
     output_dir = pathlib.Path(OUTPUT_DIR)
     output_dir.mkdir(exist_ok=True)
 
     # Output model artifacts: pickled model and JSON list of features
-    pickle.dump(model, open(output_dir / "model.pkl", 'wb'))
+    pickle.dump(final_model, open(output_dir / "model.pkl", 'wb'))
     json.dump(list(x_train.columns), open(output_dir / "model_features.json", 'w'))
-    json.dump(metrics, open(output_dir / "model_metrics.json", 'w'))
+    json.dump(final_metrics, open(output_dir / "model_metrics.json", 'w'))
 
     # Printing for Sanity Check
     print("Model name:")
-    print(model[1])
+    print(final_model[-1])
 
     print("Model Metrics:")
-    print(metrics)
-
+    print(final_metrics)
 
 if __name__ == "__main__":
     main()
