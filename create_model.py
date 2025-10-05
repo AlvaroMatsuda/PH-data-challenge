@@ -5,6 +5,7 @@ from typing import List
 from typing import Tuple
 
 import pandas
+import mlflow
 import numpy as np
 from sklearn import model_selection
 from sklearn import neighbors
@@ -21,6 +22,9 @@ SALES_COLUMN_SELECTION = [
     'sqft_above', 'sqft_basement', 'zipcode'
 ]
 OUTPUT_DIR = "model"  # Directory where output artifacts will be saved
+
+# Set random_state seed
+RANDOM_STATE_SEED = 42
 
 
 def load_data(
@@ -63,10 +67,9 @@ def main():
 
     # Train-Test Split
     x_train, _x_test, y_train, _y_test = model_selection.train_test_split(
-        x, y, random_state=42)
+        x, y, random_state=RANDOM_STATE_SEED)
 
     # Train model
-
     # model = (
     #     pipeline.make_pipeline(
     #         preprocessing.RobustScaler(),
@@ -75,23 +78,36 @@ def main():
     #     .fit(x_train, y_train)
     #     )
     
-    model = (
-        pipeline
-        .make_pipeline(
-            preprocessing.RobustScaler(),
-            tree.DecisionTreeRegressor()
+    # enable autologging
+    mlflow.set_tracking_uri("http://127.0.0.1:5000/")
+    mlflow.sklearn.autolog()
+    
+    # MLFlow tracking
+    with mlflow.start_run(run_name="decision_tree"):
+
+        # Creating the model pipeline
+        model = (
+            pipeline
+            .make_pipeline(
+                preprocessing.RobustScaler(),
+                tree.DecisionTreeRegressor(random_state=RANDOM_STATE_SEED)
+                )
+            .fit(x_train, y_train)
             )
-        .fit(x_train, y_train)
-        )
+        
+        # Model Predictions
+        y_pred = model.predict(_x_test)
 
-    # Model Performance
-    y_pred = model.predict(_x_test)
+        # Performance Metrics
+        mape = float(mean_absolute_percentage_error(_y_test, y_pred))
+        rmse = float(np.sqrt(mean_squared_error(_y_test, y_pred)))
+        r2 = float(r2_score(_y_test, y_pred))
+        metrics = {"mape": mape, "rmse": rmse, "r2": r2}
 
-    mape = float(mean_absolute_percentage_error(_y_test, y_pred))
-    rmse = float(np.sqrt(mean_squared_error(_y_test, y_pred)))
-    r2 = float(r2_score(_y_test, y_pred))
-    metrics = {"mape": mape, "rmse": rmse, "r2": r2}
-
+        # Logging info to MLFLow
+        mlflow.log_params(model[-1].get_params())
+        mlflow.log_metrics(metrics)
+        mlflow.sklearn.log_model(model, artifact_path="model")
 
 
     # Saving Artifacts
