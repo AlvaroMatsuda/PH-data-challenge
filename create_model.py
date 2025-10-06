@@ -33,7 +33,7 @@ SALES_COLUMN_SELECTION = [
 # Directory where output artifacts will be saved
 OUTPUT_DIR = "app/model"  
 
-# Set random_state seed
+# Set random_state see
 RANDOM_STATE_SEED = 42
 
 # Basic model parameters
