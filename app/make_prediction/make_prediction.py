@@ -19,7 +19,6 @@ with open(f"{BASE_DIR}/{MODEL_FEATURE_PATH}") as f:
     model_features = json.load(f)
 
 # ========= Predict Function =========
-# def predict_pipeline(data):
 def predict_pipeline(new_data):
 
     # Load payload data as Pandas DataFrame
