@@ -7,7 +7,7 @@ import pandas as pd
 
 # ========== Variables ==========
 BASE_DIR = Path(__file__).resolve(strict=True).parent
-DEMOGRAPHICS_PATH = "../data/zipcode_demographics.csv"
+DEMOGRAPHICS_PATH = "data/zipcode_demographics.csv"
 MODEL_FEATURE_PATH = "../model/model_features.json"
 
 # ========= Loading Trained Model =========
@@ -24,7 +24,6 @@ def predict_pipeline(new_data):
     # Load payload data as Pandas DataFrame
     df_new = pd.DataFrame(new_data)
     df_new["zipcode"] = df_new["zipcode"].astype(str)
-
 
     # Load demographic data
     demographics = pd.read_csv(DEMOGRAPHICS_PATH, dtype={'zipcode': str})
