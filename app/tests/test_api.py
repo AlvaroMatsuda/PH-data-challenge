@@ -21,7 +21,7 @@ def test_api():
     payload = df_payload.to_json(orient="records")
 
     # Send Post request to the API and get the response
-    r = requests.post("http://127.0.0.1:8000/predict", payload)
+    r = requests.post("http://localhost:8000/predict", payload)
 
     # response
     df_payload.loc[:, "preds"] = r.json().get("predictions")
@@ -36,3 +36,6 @@ def test_api():
     assert df_payload["preds"].isna().any() == False, "There are Null values in pred column"
 
     print(df_payload)
+
+if __name__ == "__main__":
+    test_api()
