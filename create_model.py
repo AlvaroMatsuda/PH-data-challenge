@@ -19,10 +19,10 @@ from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, 
 # Variables
 # ==========================
 # path to CSV with home sale data
-SALES_PATH = "data/kc_house_data.csv" 
+SALES_PATH = "app/data/kc_house_data.csv" 
 
 # path to CSV with demographics
-DEMOGRAPHICS_PATH = "data/zipcode_demographics.csv"  
+DEMOGRAPHICS_PATH = "app/data/zipcode_demographics.csv"  
 
 # List of columns (subset) that will be taken from home sale data
 SALES_COLUMN_SELECTION = [
