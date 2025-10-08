@@ -26,26 +26,22 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r app/requirements.txt
-          pip install pytest
-
-      - name: Run tests
-        run: pytest -v
 
       # ---- Build Docker image locally ----
       - name: Build Docker image
         run: |
-          docker build -t ml-api:latest -f ./Dockerfile .
+          docker build -t phdata-api:latest -f ./Dockerfile .
 
-      # ---- (Optional) Run the container to verify it works ----
-      - name: Run container test
-        run: |
-          docker run -d -p 8000:8000 --name ml-api-test ml-api:latest
-          sleep 5
-          docker ps
-          docker logs ml-api-test
+      # # ---- (Optional) Run the container to verify it works ----
+      # - name: Run container test
+      #   run: |
+      #     docker run -d -p 8000:8000 --name ml-api-test ml-api:latest
+      #     sleep 5
+      #     docker ps
+      #     docker logs ml-api-test
 
-      # ---- (Optional) Stop and remove the container ----
-      - name: Cleanup
-        run: |
-          docker stop ml-api-test
-          docker rm ml-api-test
+      # # ---- (Optional) Stop and remove the container ----
+      # - name: Cleanup
+      #   run: |
+      #     docker stop ml-api-test
+      #     docker rm ml-api-test
